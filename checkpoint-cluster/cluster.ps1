@@ -9,17 +9,17 @@ Add-Type -AssemblyName System.Web
 #############################################################################
 # Parameters
 #############################################################################
-
-# Description : A user principle name used by the cluster to make Azure API calls
-# Mandatory   : Yes
-$UserPrincipalName = ""
-# Description : The above user's password used by the cluster to make Azure API calls
-# Mandatory   : Yes
-$ClusterPassword = [System.Web.Security.Membership]::GeneratePassword(16, 8)
-
 # Description : Name of the resource group to create
 # Mandatory   : Yes
 $ResourceGroup = ""
+
+# Description : A service principle name used by the cluster to make API calls
+# Mandatory   : Yes
+$ServicePrincipalName = ""
+# Description : The above SPN password used by the cluster to make API calls
+# Mandatory   : Yes
+$ClusterPassword = [System.Web.Security.Membership]::GeneratePassword(16, 0)
+
 # Description : Azure location (e.g. eastus2)
 # Mandatory   : Yes
 $Location = ""
@@ -33,7 +33,7 @@ $StorageAccount = ""
 
 # SSH settings, set one of the following
 # Description : The Administrator password
-# Mandatory   : Onlhy if not provoding an SSH public key
+# Mandatory   : Only if not provoding an SSH public key
 $SSHPassword = ""
 # Description : The Administrator SSH public key (if using SSH public key authentication)
 # Mandatory   : Only if not providing an SSH password
@@ -76,7 +76,7 @@ $Subnet3PrivateAddresses = @("10.0.3.10", "10.0.3.20")
 
 # Description : The Cluster name
 # Mandatory   : Yes
-# Valid values: Must begin with a lower case letter and consist only of low case letters and numbers.
+# Valid values: Must begin with a lower case letter and consist only of lower case letters and numbers.
 $ClusterName = ""
 
 # Description : The size of the VMs of the cluster members
@@ -163,40 +163,11 @@ $CheckPointServices = @(
     }
 )
 
-$Config = ConvertTo-Json @{
-  "debug" =  $false;
-  "subscriptionId" = $SubscriptionId;
-  "resourceGroup" = $ResourceGroup;
-  "userName" = $UserPrincipalName;
-  "password" = $ClusterPassword;
-  "virtualNetwork" = $VNetName;
-  "clusterName" = $ClusterName;
-  "lbName" = "$ClusterName-LoadBalancer";
-}
-
-$CustomData = @"
-#!/bin/bash
-
-cat <<EOF >"`$FWDIR/conf/azure-ha.json"
-$Config
-EOF
-
-conf="install_security_gw=true"
-conf="`${conf}&install_ppak=true"
-conf="`${conf}&gateway_cluster_member=true"
-conf="`${conf}&install_security_managment=false"
-conf="`${conf}&ftw_sic_key=$SicKey"
-
-config_system -s "`$conf"
-shutdown -r now
-
-"@.replace("`r", "")
-
 #############################################################################
 # Parameter validation
 #############################################################################
-if (!$UserPrincipalName -or !$ClusterPassword) {
-    Throw "Invalid user credentials"
+if (!$ServicePrincipalName -or !$ClusterPassword) {
+    Throw "Invalid service principal credentials"
 }
 if (!$SSHPassword -and !$SSHPublicKey) {
     Throw "An SSH password or public key must be specified"
@@ -236,30 +207,77 @@ $ErrorActionPreference = "Stop"
 # Login:
 $Cred = Get-Credential
 Connect-MsolService -Credential $Cred
-Login-AzureRmAccount -Credential $Cred
+Add-AzureRmAccount -Credential $Cred
 
-Select-AzureRmSubscription -SubscriptionId $SubscriptionId
+if ($SubscriptionId) {
+	Select-AzureRmSubscription -SubscriptionId $SubscriptionId
+} else {
+	$SubscriptionId = (Get-AzureRmSubscription)[0].SubscriptionId
+}
 
-# Create a user:
-New-MsolUser `
-    -DisplayName "ClusterXL" `
-    -UserPrincipalName $UserPrincipalName `
-    -ForceChangePassword $false `
-    -Password $ClusterPassword `
-    -PasswordNeverExpires $true
+# Create a service principle
+$SP=Get-MsolServicePrincipal `
+    -ServicePrincipalName $ServicePrincipalName `
+    -ErrorAction SilentlyContinue
+
+if ($SP) {
+    Throw "Service principal " +  $ServicePrincipalName + `
+        " already exists."
+}
+
+$SP=New-MsolServicePrincipal `
+    -ServicePrincipalNames @($ServicePrincipalName) `
+    -StartDate (Get-Date) `
+    -EndDate (Get-Date).AddYears(10) `
+    -DisplayName $ServicePrincipalName `
+    -Type Password `
+    -Value $ClusterPassword
 
 # Create a new resource group:
 New-AzureRmResourceGroup -Name $ResourceGroup `
     -Location $Location
 
-# Sleep is needed for the new user to propogate in Azure
+# Sleep is needed for the new user to propagate in Azure
 Start-Sleep 30
+
+$Config = ConvertTo-Json @{
+  "debug" =  $false;
+  "subscriptionId" = $SubscriptionId;
+  "resourceGroup" = $ResourceGroup;
+  "credentials" = @{
+    "tenant" = (Get-AzureSubscription -Current).TenantId;
+    "grant_type" = "client_credentials";
+    "client_id" = $SP.AppPrincipalId;
+    "client_secret" = $ClusterPassword;
+  };
+  "virtualNetwork" = $VNetName;
+  "clusterName" = $ClusterName;
+  "lbName" = "$ClusterName-LoadBalancer";
+}
+
+$CustomData = @"
+#!/bin/bash
+
+cat <<EOF >"`$FWDIR/conf/azure-ha.json"
+$Config
+EOF
+
+conf="install_security_gw=true"
+conf="`${conf}&install_ppak=true"
+conf="`${conf}&gateway_cluster_member=true"
+conf="`${conf}&install_security_managment=false"
+conf="`${conf}&ftw_sic_key=$SicKey"
+
+config_system -s "`$conf"
+shutdown -r now
+
+"@.replace("`r", "")
 
 # Assign the user with permission to modify the resources in the resource group
 New-AzureRmRoleAssignment `
     -ResourceGroupName $ResourceGroup `
-    -SignInName $UserPrincipalName `
-    -RoleDefinitionName Contributor
+    -ServicePrincipalName $ServicePrincipalName `
+    -RoleDefinitionName "Contributor"
 
 
 # Create the Virtual Network, its subnets and routing tables
@@ -495,7 +513,7 @@ for ($i = 0; $i -lt 2; $i += 1) {
         -Linux `
         -ComputerName $MemberName `
         -Credential $OSCred `
-        -CustomData $CustomData `
+        -CustomData $CustomData
 
     if ($SSHPublicKey) {
         Add-AzureRmVMSshPublicKey -VM $VMConfig `

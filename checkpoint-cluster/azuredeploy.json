@@ -73,16 +73,16 @@
       },
       "type": "string"
     },
-    "roleUserName": {
+    "appPrincipalId": {
       "type": "string",
       "metadata": {
-        "description": "Azure username to make Azure API calls"
+        "description": "Application principal Id for making Azure API calls"
       }
     },
-    "rolePassword": {
+    "servicePrincipalPassword": {
       "type": "securestring",
       "metadata": {
-        "description": "Azure password to make Azure API calls"
+        "description": "Service principal password for making Azure API calls"
       }
     },
     "sicKey": {
@@ -95,7 +95,7 @@
   },
   "variables": {
     "apiVersion": "2015-06-15",
-    "customData": "[concat('#!/bin/bash\n', '\n', 'subscriptionId=\"', subscription().subscriptionId, '\"', '\n', 'resourceGroup=\"', resourceGroup().name, '\"', '\n', 'userName=\"', parameters('roleUserName'), '\"', '\n', 'password=\"', parameters('rolePassword'), '\"', '\n', 'virtualNetwork=\"', variables('vnetName'), '\"', '\n', 'clusterName=\"', parameters('clusterName'), '\"', '\n', 'lbName=\"', variables('lbName'), '\"', '\n', '\n', 'cat <<EOF >\"$FWDIR/conf/azure-ha.json\"\n', '{\n', '  \"debug\": false,\n', '  \"subscriptionId\": \"$subscriptionId\",\n', '  \"resourceGroup\": \"$resourceGroup\",\n', '  \"userName\": \"$userName\",\n', '  \"password\": \"$password\",\n', '  \"virtualNetwork\": \"$virtualNetwork\",\n', '  \"clusterName\": \"$clusterName\",\n', '  \"lbName\": \"$lbName\"\n', '}\n', 'EOF\n', '\n', 'adminPassword=\"', parameters('adminPassword'), '\"', '\n', 'sicKey=\"', parameters('sicKey'), '\"', '\n', 'conf=\"install_security_gw=true\"\n', 'conf=\"${conf}&install_ppak=true\"\n', 'conf=\"${conf}&gateway_cluster_member=true\"\n', 'conf=\"${conf}&install_security_managment=false\"\n', 'conf=\"${conf}&ftw_sic_key=$sicKey\"\n', '\n', 'config_system -s \"$conf\"\n', 'shutdown -r now\n')]",
+    "customData": "[concat('#!/bin/bash\n', '\n', 'subscriptionId=\"', subscription().subscriptionId, '\"', '\n', 'tenantId=\"', subscription().tenantId, '\"', '\n', 'resourceGroup=\"', resourceGroup().name, '\"', '\n', 'appPrincipalId=\"', parameters('appPrincipalId'), '\"', '\n', 'password=\"', parameters('servicePrincipalPassword'), '\"', '\n', 'virtualNetwork=\"', variables('vnetName'), '\"', '\n', 'clusterName=\"', parameters('clusterName'), '\"', '\n', 'lbName=\"', variables('lbName'), '\"', '\n', '\n', 'cat <<EOF >\"$FWDIR/conf/azure-ha.json\"\n', '{\n', '  \"debug\": false,\n', '  \"subscriptionId\": \"$subscriptionId\",\n', '  \"resourceGroup\": \"$resourceGroup\",\n', '  \"credentials\": {\n', '    \"tenant\": \"$tenantId\",\n', '    \"grant_type\": \"client_credentials\",\n', '    \"client_id\": \"$appPrincipalId\",\n', '    \"client_secret\": \"$password\"\n', '  },\n', '  \"virtualNetwork\": \"$virtualNetwork\",\n', '  \"clusterName\": \"$clusterName\",\n', '  \"lbName\": \"$lbName\"\n', '}\n', 'EOF\n', '\n', 'adminPassword=\"', parameters('adminPassword'), '\"', '\n', 'sicKey=\"', parameters('sicKey'), '\"', '\n', 'conf=\"install_security_gw=true\"\n', 'conf=\"${conf}&install_ppak=true\"\n', 'conf=\"${conf}&gateway_cluster_member=true\"\n', 'conf=\"${conf}&install_security_managment=false\"\n', 'conf=\"${conf}&ftw_sic_key=$sicKey\"\n', '\n', 'config_system -s \"$conf\"\n', 'shutdown -r now\n')]",
     "imageOffer": "check-point-r77-10",
     "imagePublisher": "checkpoint",
     "imageReference": "[variables(concat('imageReference', parameters('offer')))]",

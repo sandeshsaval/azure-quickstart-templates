@@ -1,9 +1,10 @@
 #!/bin/bash
 
 subscriptionId="subscription().subscriptionId"
+tenantId="subscription().tenantId"
 resourceGroup="resourceGroup().name"
-userName="parameters('roleUserName')"
-password="parameters('rolePassword')"
+appPrincipalId="parameters('appPrincipalId')"
+password="parameters('servicePrincipalPassword')"
 virtualNetwork="variables('vnetName')"
 clusterName="parameters('clusterName')"
 lbName="variables('lbName')"
@@ -13,8 +14,12 @@ cat <<EOF >"$FWDIR/conf/azure-ha.json"
   "debug": false,
   "subscriptionId": "$subscriptionId",
   "resourceGroup": "$resourceGroup",
-  "userName": "$userName",
-  "password": "$password",
+  "credentials": {
+    "tenant": "$tenantId",
+    "grant_type": "client_credentials",
+    "client_id": "$appPrincipalId",
+    "client_secret": "$password"
+  },
   "virtualNetwork": "$virtualNetwork",
   "clusterName": "$clusterName",
   "lbName": "$lbName"
