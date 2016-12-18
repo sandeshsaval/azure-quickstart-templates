@@ -13,12 +13,9 @@ Add-Type -AssemblyName System.Web
 # Mandatory   : Yes
 $ResourceGroup = ""
 
-# Description : A service principle name used by the cluster to make API calls
-# Mandatory   : Yes
-$ServicePrincipalName = ""
 # Description : The above SPN password used by the cluster to make API calls
 # Mandatory   : Yes
-$ClusterPassword = [System.Web.Security.Membership]::GeneratePassword(16, 0)
+$ClusterPassword = [System.Web.Security.Membership]::GeneratePassword(20, 10)
 
 # Description : Azure location (e.g. eastus2)
 # Mandatory   : Yes
@@ -166,7 +163,7 @@ $CheckPointServices = @(
 #############################################################################
 # Parameter validation
 #############################################################################
-if (!$ServicePrincipalName -or !$ClusterPassword) {
+if (!$ClusterPassword) {
     Throw "Invalid service principal credentials"
 }
 if (!$SSHPassword -and !$SSHPublicKey) {
@@ -205,9 +202,7 @@ if (!@("sg-byol", "sg-ngtp").Contains($SKU))  {
 $ErrorActionPreference = "Stop"
 
 # Login:
-$Cred = Get-Credential
-Connect-MsolService -Credential $Cred
-Add-AzureRmAccount -Credential $Cred
+Add-AzureRmAccount
 
 if ($SubscriptionId) {
 	Select-AzureRmSubscription -SubscriptionId $SubscriptionId
@@ -215,30 +210,29 @@ if ($SubscriptionId) {
 	$SubscriptionId = (Get-AzureRmSubscription)[0].SubscriptionId
 }
 
-# Create a service principle
-$SP=Get-MsolServicePrincipal `
-    -ServicePrincipalName $ServicePrincipalName `
-    -ErrorAction SilentlyContinue
+# Create a new Azure AD application and a service principal
+$AppName = "check-point-cluster-"+[guid]::NewGuid()
+$azureAdApplication = New-AzureRmADApplication `
+    -DisplayName $AppName `
+    -HomePage "https://localhost/$AppName" `
+    -IdentifierUris "https://localhost/$AppName" `
+    -Password $ClusterPassword `
+    -EndDate (Get-Date).AddYears(10)
 
-if ($SP) {
-    Throw "Service principal " +  $ServicePrincipalName + `
-        " already exists."
-}
-
-$SP=New-MsolServicePrincipal `
-    -ServicePrincipalNames @($ServicePrincipalName) `
-    -StartDate (Get-Date) `
-    -EndDate (Get-Date).AddYears(10) `
-    -DisplayName $ServicePrincipalName `
-    -Type Password `
-    -Value $ClusterPassword
+New-AzureRmADServicePrincipal -ApplicationId $azureAdApplication.ApplicationId
 
 # Create a new resource group:
 New-AzureRmResourceGroup -Name $ResourceGroup `
     -Location $Location
 
-# Sleep is needed for the new user to propagate in Azure
-Start-Sleep 30
+# Wait till the new application is propagated
+Start-Sleep -Seconds 15
+
+# Assign the service with permission to modify the resources in the resource group
+New-AzureRmRoleAssignment `
+    -ResourceGroupName $ResourceGroup `
+    -ServicePrincipalName $azureAdApplication.ApplicationId.Guid `
+    -RoleDefinitionName Contributor
 
 $Config = ConvertTo-Json @{
   "debug" =  $false;
@@ -247,7 +241,7 @@ $Config = ConvertTo-Json @{
   "credentials" = @{
     "tenant" = (Get-AzureSubscription -Current).TenantId;
     "grant_type" = "client_credentials";
-    "client_id" = $SP.AppPrincipalId;
+    "client_id" = $azureAdApplication.ApplicationId.Guid;
     "client_secret" = $ClusterPassword;
   };
   "virtualNetwork" = $VNetName;
@@ -272,13 +266,6 @@ config_system -s "`$conf"
 shutdown -r now
 
 "@.replace("`r", "")
-
-# Assign the user with permission to modify the resources in the resource group
-New-AzureRmRoleAssignment `
-    -ResourceGroupName $ResourceGroup `
-    -ServicePrincipalName $ServicePrincipalName `
-    -RoleDefinitionName "Contributor"
-
 
 # Create the Virtual Network, its subnets and routing tables
 $Subnet1RT = New-AzureRmRouteTable `
