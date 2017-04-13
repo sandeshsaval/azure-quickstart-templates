@@ -1,17 +1,9 @@
 #############################################################################
-# Dependencies
-#############################################################################
-if ($PSVersionTable.PSVersion.Major -lt 4) {
-    Throw "Please update your PowerShell"
-}
-Add-Type -AssemblyName System.Web
-
-#############################################################################
 # Parameters
 #############################################################################
 # Description : Name of the resource group to create
 # Mandatory   : Yes
-$ResourceGroup = ""
+$ResourceGroup = "ABFSGAZFW"
 
 # Description : The above SPN password used by the cluster to make API calls
 # Mandatory   : Yes
@@ -19,19 +11,19 @@ $ClusterPassword = [System.Web.Security.Membership]::GeneratePassword(20, 10)
 
 # Description : Azure location (e.g. eastus2)
 # Mandatory   : Yes
-$Location = ""
+$Location = "Central India"
 # Description : The Subscription ID to use in case you have more than one
 # Mandatory   : No
-$SubscriptionId = ""
+$SubscriptionId = "0e01f590-5459-4349-b165-111906095afd"
 # Description : The Name of storage account to create
 # Mandatory   : Yes
 # Valid values: Globally unique, 3-24 lower case alphanumeric characters.
-$StorageAccount = ""
+$StorageAccount = "ABFSGAZFW02"
 
 # SSH settings, set one of the following
 # Description : The Administrator password
 # Mandatory   : Only if not provoding an SSH public key
-$SSHPassword = ""
+$SSHPassword = "admin@123"
 # Description : The Administrator SSH public key (if using SSH public key authentication)
 # Mandatory   : Only if not providing an SSH password
 $SSHPublicKey = ""
@@ -40,41 +32,35 @@ $SSHPublicKey = ""
 # Secure Internal Communication (SIC) one time key used to establish initial
 # trust between the gateway and its management server.
 # Mandatory   : Yes
-$SicKey = ""
+$SicKey = "1024"
 
 # Description : The name of the Virtual Network to create
 # Mandatory   : Yes
-$VNetName = "vnet"
+$VNetName = "abfsgvnet002"
 
 # Description : The address range of the Virtual Network to create
 # Mandatory   : Yes
 # Valid values: CIDR notation
-$AddressPrefix = "10.0.0.0/16"
+$AddressPrefix = "10.23.220.0/27"
 
 # Description : The names of the subnets to create
 # Mandatory   : Yes
-$Subnet1Name = "Frontend"
-$Subnet2Name = "Web"
-$Subnet3Name = "App"
+$Subnet1Name = "ABFSGFWDMZ"
 
 # Description : The address prefix of each subnet
 # Mandatory   : Yes
 # Valid values: CIDR notation
-$Subnet1Prefix = "10.0.1.0/24"
-$Subnet2Prefix = "10.0.2.0/24"
-$Subnet3Prefix = "10.0.3.0/24"
+$Subnet1Prefix = "10.23.220.0/27"
 
 # Description : Cluster members IP private addresses
 # Mandatory   : Yes
 # Valid values: A list of IPv4 address
-$Subnet1PrivateAddresses = @("10.0.1.10", "10.0.1.20")
-$Subnet2PrivateAddresses = @("10.0.2.10", "10.0.2.20")
-$Subnet3PrivateAddresses = @("10.0.3.10", "10.0.3.20")
+$Subnet1PrivateAddresses = @("10.23.220.5", "10.23.220.10")
 
 # Description : The Cluster name
 # Mandatory   : Yes
 # Valid values: Must begin with a lower case letter and consist only of lower case letters and numbers.
-$ClusterName = ""
+$ClusterName = "ABFSGAZFWCLUST"
 
 # Description : The size of the VMs of the cluster members
 # Mandatory   : Yes
@@ -82,31 +68,6 @@ $ClusterVMSize = "Standard_D3_v2"
 
 # Description : A list of web application to create
 # Mandatory   : No
-$WebApps = @(
-    @{
-        "name" = "WebApp1";
-        "services" = @(
-            @{
-                "name" = "http";
-                "protocol" = "tcp";
-                "frontendport" = 80;
-                "backendport" = "8081";
-            }
-        )
-    },
-    @{
-        "name" = "WebApp2";
-        "services" = @(
-            @{
-                "name" = "http";
-                "protocol" = "tcp";
-                "frontendport" = 80;
-                "backendport" = "8082";
-            }
-        )
-    }
-)
-
 # Description : The licensing model
 # Mandatory   : Yes
 # Valid values:  "sg-byol" - for Bring Your Own License
